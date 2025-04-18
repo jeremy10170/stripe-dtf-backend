@@ -1,46 +1,57 @@
+const express = require("express");
+const Stripe = require("stripe");
+const cors = require("cors");
 
-const express = require('express');
 const app = express();
-const stripe = require('stripe')('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');
-const cors = require('cors');
-
-app.use(express.json());
 app.use(cors());
+app.use(express.json());
 
-app.post('/create-checkout-session', async (req, res) => {
-  const { quantity } = req.body;
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
-  if (!quantity || quantity < 1) {
-    return res.status(400).json({ error: 'Quantité invalide' });
-  }
+app.post("/create-checkout-session", async (req, res) => {
+  const { quantity, format } = req.body;
 
-  const productPrice = 600; // 6€ en centimes
-  const shipping = 650; // 6.50€ en centimes
-  const totalAmount = quantity * productPrice + shipping;
+  const prices = {
+    A6: 250,
+    A5: 400,
+    A4: 600,
+    A3: 1000,
+  };
+
+  const shipping = 650;
+  const unitPrice = prices[format] || prices["A4"];
+  const total = unitPrice * quantity + shipping;
 
   try {
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      line_items: [{
-        price_data: {
-          currency: 'eur',
-          product_data: {
-            name: `Planche DTF personnalisée (x${quantity})`,
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          price_data: {
+            currency: "eur",
+            product_data: {
+              name: `Planche DTF ${format}`,
+            },
+            unit_amount: total,
           },
-          unit_amount: totalAmount,
+          quantity: 1,
         },
-        quantity: 1,
-      }],
-      mode: 'payment',
-      success_url: 'https://sublims-dtf.netlify.app/success',
-      cancel_url: 'https://sublims-dtf.netlify.app/cancel',
+      ],
+      mode: "payment",
+      success_url: "https://sublims-dtf.com/merci.html",
+      cancel_url: "https://sublims-dtf.com/",
     });
 
     res.json({ url: session.url });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: "Erreur lors de la création de la session Stripe" });
   }
 });
 
-const PORT = process.env.PORT || 4242;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.get("/", (req, res) => {
+  res.send("Backend Stripe en ligne.");
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Serveur Stripe lancé sur le port ${PORT}`));
